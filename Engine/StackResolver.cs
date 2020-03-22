@@ -421,7 +421,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
             }
 
             // using the ".dll!0x" to locate the module names
-            var rgxModuleName = new Regex(@"(?<module>\w+)(\.dll(!(?<symbolizedfunc>.+))*)*\s*\+(0[xX])*");
+            var rgxModuleName = new Regex(@"(?<module>\w+)((\.(dll|exe))*(!(?<symbolizedfunc>.+))*)*\s*\+(0[xX])*");
             var matchedModuleNames = rgxModuleName.Matches(reconstructedCallstack.ToString());
 
             foreach (Match moduleMatch in matchedModuleNames)
@@ -454,8 +454,8 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
         {
             var finalCallstack = new StringBuilder();
 
-            var rgxModuleName = new Regex(@"(?<module>\w+)(\.dll)*\s*\+\s*(0[xX])*(?<offset>[0-9a-fA-F]+)\s*");
-            var rgxAlreadySymbolizedFrame = new Regex(@"(?<module>\w+)(\.dll)!(?<symbolizedfunc>.+?)\s*\+\s*(0[xX])*(?<offset>[0-9a-fA-F]+)\s*");
+            var rgxModuleName = new Regex(@"(?<module>\w+)(\.(dll|exe))*\s*\+\s*(0[xX])*(?<offset>[0-9a-fA-F]+)\s*");
+            var rgxAlreadySymbolizedFrame = new Regex(@"(?<module>\w+)(\.(dll|exe))*!(?<symbolizedfunc>.+?)\s*\+\s*(0[xX])*(?<offset>[0-9a-fA-F]+)\s*");
 
             foreach (var iterFrame in callStackLines)
             {
@@ -473,8 +473,6 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                     var matchAlreadySymbolized = rgxAlreadySymbolizedFrame.Match(currentFrame);
                     if (matchAlreadySymbolized.Success && _diautils.ContainsKey(matchAlreadySymbolized.Groups["module"].Value))
                     {
-                        var something = currentFrame;
-
                         var myDIAsession = _diautils[matchAlreadySymbolized.Groups["module"].Value]._IDiaSession;
                         myDIAsession.findChildren(myDIAsession.globalScope,
                             SymTagEnum.SymTagNull,
@@ -484,30 +482,43 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
 
                         if (matchedSyms.count > 0)
                         {
-                            IDiaSymbol a = matchedSyms.Item(0);
-
-                            // for this 're-lookup source' case, it is appropriate to use the seg / address / offset
-                            // than use RVA. Using RVA seems to produce totally incorrect results in many cases
-                            var rva = a.addressOffset;
-                            var seg = a.addressSection;
-
-                            uint offset = Convert.ToUInt32(matchAlreadySymbolized.Groups["offset"].Value, 16);
-                            rva = rva + offset;
-
-                            myDIAsession.findLinesByAddr(seg, rva, 1, out IDiaEnumLineNumbers enumLineNums);
-
-                            string tmpsourceInfo = string.Empty;
-
-                            // only if we found line number information should we append to output 
-                            if (enumLineNums.count > 0)
+                            for (uint tmpOrdinal = 0; tmpOrdinal < matchedSyms.count; tmpOrdinal++)
                             {
-                                tmpsourceInfo = string.Format("({0}:{1})", enumLineNums.Item(0).sourceFile.fileName, enumLineNums.Item(0).lineNumber);
-                            }
+                                IDiaSymbol a = matchedSyms.Item(tmpOrdinal);
 
-                            finalCallstack.AppendFormat("{0}!{1}\t{2}",
-                                matchAlreadySymbolized.Groups["module"].Value,
-                                matchAlreadySymbolized.Groups["symbolizedfunc"].Value,
-                                tmpsourceInfo);
+                                // for this 're-lookup source' case, it is appropriate to use the seg / address / offset
+                                // than use RVA. Using RVA seems to produce totally incorrect results in many cases
+                                var rva = a.addressOffset;
+                                var seg = a.addressSection;
+                                var len = (uint) a.length;
+
+                                string offsetString = matchAlreadySymbolized.Groups["offset"].Value;
+                                int numberBase = offsetString.ToLowerInvariant().StartsWith("0x") ? 16 : 10;
+
+                                uint offset = Convert.ToUInt32(offsetString, numberBase);
+                                rva += offset;
+
+                                myDIAsession.findLinesByAddr(seg, rva, len, out IDiaEnumLineNumbers enumLineNums);
+
+                                string tmpsourceInfo = string.Empty;
+
+                                // only if we found line number information should we append to output
+                                if (enumLineNums.count > 0)
+                                {
+                                    tmpsourceInfo = string.Format("({0}:{1})", enumLineNums.Item(0).sourceFile.fileName, enumLineNums.Item(0).lineNumber);
+                                }
+
+                                if (tmpOrdinal > 0)
+                                {
+                                    finalCallstack.Append(" OR ");
+                                }
+
+                                finalCallstack.AppendFormat("{0}!{1}{2}\t{3}",
+                                    matchAlreadySymbolized.Groups["module"].Value,
+                                    matchAlreadySymbolized.Groups["symbolizedfunc"].Value,
+                                    includeOffsets ? "+" + offsetString : string.Empty,
+                                    tmpsourceInfo);
+                            }
                         }
                         else
                         {
@@ -711,12 +722,24 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
 
             if (includeSourceInfo)
             {
-                _diautils[moduleName]._IDiaSession.findLinesByRVA(rva, 1, out IDiaEnumLineNumbers enumLineNums);
+                _diautils[moduleName]._IDiaSession.findLinesByRVA(rva, 0, out IDiaEnumLineNumbers enumLineNums);
 
                 // only if we found line number information should we append to output 
                 if (enumLineNums.count > 0)
                 {
-                    sourceInfo = string.Format("({0}:{1})", enumLineNums.Item(0).sourceFile.fileName, enumLineNums.Item(0).lineNumber);
+                    for (uint tmpOrdinal = 0; tmpOrdinal < enumLineNums.count; tmpOrdinal++)
+                    {
+                        if (tmpOrdinal > 0)
+                        {
+                            sourceInfo += " -- WARN: multiple matches -- ";
+                        }
+
+                        sourceInfo += string.Format("({0}:{1})", enumLineNums.Item(0).sourceFile.fileName, enumLineNums.Item(0).lineNumber);
+                    }
+                }
+                else
+                {
+                    sourceInfo = "-- WARN: unable to find source info --";
                 }
             }
 
