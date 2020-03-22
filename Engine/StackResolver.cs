@@ -474,7 +474,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                     if (matchAlreadySymbolized.Success && _diautils.ContainsKey(matchAlreadySymbolized.Groups["module"].Value))
                     {
                         var myDIAsession = _diautils[matchAlreadySymbolized.Groups["module"].Value]._IDiaSession;
-                        myDIAsession.findChildren(myDIAsession.globalScope,
+                        myDIAsession.findChildrenEx(myDIAsession.globalScope,
                             SymTagEnum.SymTagNull,
                             matchAlreadySymbolized.Groups["symbolizedfunc"].Value,
                             0,
@@ -485,12 +485,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                             for (uint tmpOrdinal = 0; tmpOrdinal < matchedSyms.count; tmpOrdinal++)
                             {
                                 IDiaSymbol a = matchedSyms.Item(tmpOrdinal);
-
-                                // for this 're-lookup source' case, it is appropriate to use the seg / address / offset
-                                // than use RVA. Using RVA seems to produce totally incorrect results in many cases
-                                var rva = a.addressOffset;
-                                var seg = a.addressSection;
-                                var len = (uint) a.length;
+                                var rva = a.relativeVirtualAddress;
 
                                 string offsetString = matchAlreadySymbolized.Groups["offset"].Value;
                                 int numberBase = offsetString.ToLowerInvariant().StartsWith("0x") ? 16 : 10;
@@ -498,7 +493,7 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                                 uint offset = Convert.ToUInt32(offsetString, numberBase);
                                 rva += offset;
 
-                                myDIAsession.findLinesByAddr(seg, rva, len, out IDiaEnumLineNumbers enumLineNums);
+                                myDIAsession.findLinesByRVA(rva, 0, out IDiaEnumLineNumbers enumLineNums);
 
                                 string tmpsourceInfo = string.Empty;
 
