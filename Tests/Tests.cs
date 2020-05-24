@@ -1,7 +1,7 @@
 ﻿//------------------------------------------------------------------------------
 //    The MIT License (MIT)
 //    
-//    Copyright (c) 2019 Arvind Shyamsundar
+//    Copyright (c) 2020 Arvind Shyamsundar
 //    
 //    Permission is hereby granted, free of charge, to any person obtaining a copy
 //    of this software and associated documentation files (the "Software"), to deal
@@ -31,35 +31,12 @@
 
 namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
 {
-    using System;
-    using System.IO;
+    using Xunit;
 
-    class Program
+    public class Tests
     {
-        static void Main(string[] args)
-        {
-            int retCode = 0;
-
-            if (!TestBlockResolution())
-            {
-                Console.WriteLine("FAIL: TestBlockResolution");
-                retCode = 1;
-            }
-            else
-                Console.WriteLine("PASS: TestBlockResolution");
-
-            if (!TestOrdinal())
-            {
-                Console.WriteLine("FAIL: TestOrdinal");
-                retCode = 1;
-            }
-            else
-                Console.WriteLine("PASS: TestOrdinal");
-
-            Environment.ExitCode = retCode;
-        }
-
-        private static bool TestBlockResolution()
+        [Fact]
+        public void BlockResolution()
         {
             var pdbPath = @"..\..\Tests\TestCases\TestBlockResolution";
             var csr = new StackResolver();
@@ -75,12 +52,13 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                 false,
                 null);
 
-            Console.WriteLine($"TestBlockResolution: ResolveCallstacks returned {ret}");
+            // .WriteLine($"TestBlockResolution: ResolveCallstacks returned {ret}");
 
-            return ret.Trim() == "KERNELBASE!SignalObjectAndWait+147716";
+            Assert.Equal("KERNELBASE!SignalObjectAndWait+147716", ret.Trim());
         }
 
-        private static bool TestOrdinal()
+        [Fact]
+        public void TestOrdinal()
         {
             var csr = new StackResolver();
             var dllPaths = new System.Collections.Generic.List<string>
@@ -100,9 +78,9 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                 false,
                 null);
 
-            Console.WriteLine($"TestOrdinal: ResolveCallstacks returned {ret}");
+            // Console.WriteLine($"TestOrdinal: ResolveCallstacks returned {ret}");
 
-            return ret.Trim() == "sqldk!SOS_Scheduler::SwitchContext+941";
+            Assert.Equal("sqldk!SOS_Scheduler::SwitchContext+941", ret.Trim());
         }
     }
 }

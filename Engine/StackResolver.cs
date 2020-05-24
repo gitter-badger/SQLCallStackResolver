@@ -1,7 +1,7 @@
 ﻿//------------------------------------------------------------------------------
 //    The MIT License (MIT)
 //    
-//    Copyright (c) 2019 Arvind Shyamsundar
+//    Copyright (c) 2020 Arvind Shyamsundar
 //    
 //    Permission is hereby granted, free of charge, to any person obtaining a copy
 //    of this software and associated documentation files (the "Software"), to deal
@@ -1148,6 +1148,9 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
         /// <param name="obj"></param>
         private void ProcessCallStack(Object obj)
         {
+            var actContext = new ActivationContextHelper();
+            actContext.EstablishActivationContext();
+
             var tp = (ThreadParams)obj;
 
             Dictionary<string, DiaUtil> _diautils = new Dictionary<string, DiaUtil>();
@@ -1212,6 +1215,8 @@ namespace Microsoft.SqlServer.Utils.Misc.SQLCallStackResolver
                     diautil.Dispose();
                 }
             }
+
+            actContext.DestroyActivationContext();
         }
 
         /// <summary>
